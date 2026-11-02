@@ -5,6 +5,7 @@ import com.willfp.eco.core.bstats.EcoMetricsChart
 import com.willfp.eco.core.command.impl.PluginCommand
 import com.willfp.eco.core.display.DisplayModule
 import com.willfp.eco.core.entities.ai.EntityGoals
+import com.willfp.eco.core.entities.ai.TargetGoals
 import com.willfp.eco.core.integrations.IntegrationLoader
 import com.willfp.eco.core.items.Items
 import com.willfp.eco.util.toSingletonList
@@ -14,6 +15,16 @@ import com.willfp.ecomobs.commands.CommandEcoMobs
 import com.willfp.ecomobs.display.SpawnEggDisplay
 import com.willfp.ecomobs.display.SpawnerItemDisplay
 import com.willfp.ecomobs.goals.entity.EntityGoalRandomTeleport
+import com.willfp.ecomobs.goals.target.TargetGoalClosestPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalHighestArmorPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalHighestHealthPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalLastDamagerPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalLowestArmorPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalLowestHealthPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalMostCrowdedPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalNotLookingPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalRandomPlayer
+import com.willfp.ecomobs.goals.target.TargetGoalTopDamagerPlayer
 import com.willfp.ecomobs.handler.ChunkHandler
 import com.willfp.ecomobs.handler.DamageModifierHandler
 import com.willfp.ecomobs.handler.DamageStageHandler
@@ -32,14 +43,15 @@ import com.willfp.ecomobs.handler.SpawnerHandler
 import com.willfp.ecomobs.handler.SpawnerStackHandler
 import com.willfp.ecomobs.handler.StackHandler
 import com.willfp.ecomobs.handler.VanillaCompatibilityHandlers
-import com.willfp.ecomobs.integrations.bettermodel.IntegrationBetterModel
 import com.willfp.ecomobs.integrations.coreprotect.IntegrationCoreProtect
 import com.willfp.ecomobs.integrations.levelledmobs.IntegrationLevelledMobs
 import com.willfp.ecomobs.integrations.libsdisguises.IntegrationLibsDisguises
-import com.willfp.ecomobs.integrations.modelengine.IntegrationModelEngine
+import com.willfp.ecomobs.integrations.model.IntegrationModel
 import com.willfp.ecomobs.mob.EcoMobs
 import com.willfp.ecomobs.mob.damage.TopDamagerHandler
 import com.willfp.ecomobs.mob.impl.ecoMob
+import com.willfp.ecomobs.scheduled.ScheduledSpawnHandler
+import com.willfp.ecomobs.scheduled.ScheduledSpawner
 import com.willfp.ecomobs.spawner.PlacedSpawners
 import com.willfp.ecomobs.spawner.SpawnerAnimations
 import com.willfp.ecomobs.spawner.SpawnerDisplay
@@ -58,6 +70,7 @@ import com.willfp.libreforge.loader.configs.ConfigCategory
 import com.willfp.libreforge.registerSpecificHolderProvider
 import org.bukkit.entity.Mob
 import org.bukkit.event.Listener
+import java.util.logging.Level
 
 internal lateinit var plugin: EcoMobsPlugin
     private set
@@ -80,6 +93,16 @@ class EcoMobsPlugin : LibreforgePlugin() {
 
     override fun handleLoad() {
         EntityGoals.register(EntityGoalRandomTeleport.Deserializer)
+        TargetGoals.register(TargetGoalClosestPlayer.Deserializer)
+        TargetGoals.register(TargetGoalHighestArmorPlayer.Deserializer)
+        TargetGoals.register(TargetGoalHighestHealthPlayer.Deserializer)
+        TargetGoals.register(TargetGoalLastDamagerPlayer.Deserializer)
+        TargetGoals.register(TargetGoalLowestArmorPlayer.Deserializer)
+        TargetGoals.register(TargetGoalLowestHealthPlayer.Deserializer)
+        TargetGoals.register(TargetGoalMostCrowdedPlayer.Deserializer)
+        TargetGoals.register(TargetGoalNotLookingPlayer.Deserializer)
+        TargetGoals.register(TargetGoalRandomPlayer.Deserializer)
+        TargetGoals.register(TargetGoalTopDamagerPlayer.Deserializer)
         Items.registerItemProvider(SpawnerItems)
         EcoMobsTriggers.registerAll()
     }
@@ -104,15 +127,23 @@ class EcoMobsPlugin : LibreforgePlugin() {
         WaterSensitivitySettings.reload()
         SunlightBurningSettings.reload()
         MobStackTicker.start()
+        ScheduledSpawner.start()
         SpawnerHolograms.reloadAll()
     }
 
     override fun handleDisable() {
-        SpawnerDisplay.stop()
-        SpawnerSpawnLoop.stop()
-        MobStackTicker.stop()
-        SpawnerHolograms.clear()
-        PlacedSpawners.clear()
+        runCatching {
+            SpawnerDisplay.stop()
+            SpawnerSpawnLoop.stop()
+            MobStackTicker.stop()
+            ScheduledSpawner.stop()
+            SpawnerHolograms.clear()
+            PlacedSpawners.clear()
+        }.onFailure { exception ->
+            logger.log(Level.SEVERE, "Could not clean up on disable", exception)
+        }
+
+        ScheduledSpawnHandler.saveOnDisable()
     }
 
     override fun loadListeners(): List<Listener> {
@@ -130,7 +161,8 @@ class EcoMobsPlugin : LibreforgePlugin() {
             SunlightBurningHandler,
             SpawnerStackHandler,
             StackHandler,
-            ChunkHandler
+            ChunkHandler,
+            ScheduledSpawnHandler
         ) + platformListeners()
     }
 
@@ -159,8 +191,16 @@ class EcoMobsPlugin : LibreforgePlugin() {
     override fun loadIntegrationLoaders(): List<IntegrationLoader> {
         return listOf(
             IntegrationLoader("LevelledMobs") { this.eventManager.registerListener(IntegrationLevelledMobs) },
-            IntegrationLoader("ModelEngine") { this.eventManager.registerListener(IntegrationModelEngine) },
-            IntegrationLoader("BetterModel") { this.eventManager.registerListener(IntegrationBetterModel) },
+            IntegrationLoader("ModelEngine") {
+                this.eventManager.registerListener(
+                    IntegrationModel(configKey = "model-engine", pluginName = "ModelEngine")
+                )
+            },
+            IntegrationLoader("BetterModel") {
+                this.eventManager.registerListener(
+                    IntegrationModel(configKey = "better-model", pluginName = "BetterModel")
+                )
+            },
             IntegrationLoader("LibsDisguises") { this.eventManager.registerListener(IntegrationLibsDisguises) },
             IntegrationLoader("CoreProtect") { this.eventManager.registerListener(IntegrationCoreProtect) },
         )

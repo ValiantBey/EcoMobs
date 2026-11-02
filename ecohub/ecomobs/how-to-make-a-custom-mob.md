@@ -8,7 +8,7 @@ A custom mob is a vanilla **base entity** wrapped with your own **stats, equipme
 ## Quick start
 
 1. Open `plugins/EcoMobs/mobs/` and copy `_example.yml`, renaming it to your mob's ID, e.g. `necrotic_soldier.yml`. The file name (without `.yml`) is the mob ID.
-2. Set the base `mob` and stat modifiers, and pick a `category` (this controls natural spawning).
+2. Set the base `mob` and stat modifiers, and pick a `category` (this controls natural spawning; leave it out if the mob should never spawn naturally).
 3. Set the `display-name`, then fill in the parts you want: `equipment`, `effects`, `drops`, `boss-bar`, and `spawn`.
 4. Run `/ecomobs reload` to load the mob.
 5. Run `/ecomobs spawn necrotic_soldier` and confirm the mob appears in the world with the name and stats you set.
@@ -40,14 +40,14 @@ A mob config is a set of named parts, each controlling one aspect of the mob.
 | **Defence** | Mounting and per-cause damage modifiers |
 | **Drops** | Experience and item drops on death |
 | **Boss bar** | The on-screen health bar |
-| **Spawn** | Spawn totems and craftable spawn eggs |
+| **Spawn** | Spawn totems, craftable spawn eggs, and scheduled spawning at fixed points |
 
 Here is a complete mob with every part in place:
 
 ```yaml
 # === Mob info: the base entity and identity ===
 mob: zombie attack-damage:90 movement-speed:1.5 follow-range:16 health:1200 # Base entity plus stat modifiers; see the Entity Lookup System
-category: common # The category ID; controls natural spawning (required)
+category: common # The category ID; controls natural spawning. Optional.
 display-name: "&cNecrotic Soldier &7| &c%health%♥ &7| &e%time%" # Supports the internal placeholders below
 lifespan: 120 # Seconds before the mob despawns; set to -1 to disable
 
@@ -92,8 +92,24 @@ integrations:
     can-level: true # Allow LevelledMobs to level this mob
   model-engine:
     id: "" # ModelEngine model ID; leave blank for none
+    animations: # Optional; each takes one name or a list, picked at random each time
+      idle: [ ] # Loops while the mob stands still
+      move: [ ] # Loops while the mob moves
+      spawn: [ ] # Plays once when the mob spawns
+      melee-attack: [ ] # Plays once when the mob hits something in melee
+      ranged-attack: [ ] # Plays once when the mob shoots a projectile
+      take-damage: [ ] # Plays once when the mob is hurt
+      death: [ ] # Plays once when the mob dies
   better-model:
     id: "" # BetterModel model ID; leave blank for none
+    animations: # Optional; each takes one name or a list, picked at random each time
+      idle: [ ] # Loops while the mob stands still
+      move: [ ] # Loops while the mob moves
+      spawn: [ ] # Plays once when the mob spawns
+      melee-attack: [ ] # Plays once when the mob hits something in melee
+      ranged-attack: [ ] # Plays once when the mob shoots a projectile
+      take-damage: [ ] # Plays once when the mob is hurt
+      death: [ ] # Plays once when the mob dies
   libs-disguises:
     id: "" # LibsDisguises disguise ID; leave blank for none
 
@@ -145,7 +161,7 @@ boss-bar:
   style: progress # progress, notched_20, notched_12, notched_10, notched_6
   radius: 120 # Distance from the mob where the bar is visible
 
-# === Spawn: totems and eggs ===
+# === Spawn: totems, eggs, and scheduled spawning ===
 spawn:
   totem:
     enabled: false # If a 3-block totem can summon the mob
@@ -175,6 +191,20 @@ spawn:
       - iron_block
       - netherite_block
       - iron_block
+  scheduled:
+    enabled: false # If the mob spawns at fixed points on a timer.
+    points:
+      - id: arena
+        world: world
+        x: 0.5
+        y: 64
+        z: 0.5
+    max-alive: 1 # The most mobs from one point alive at once.
+    interval:
+      min: 1800 # Seconds, picked at random between min and max.
+      max: 3600
+    conditions: [ ] # Conditions the point must meet when a spawn is due.
+    broadcast: [ ] # Lines sent to all players when the mob spawns at a point.
 ```
 
 ### Mob info
@@ -183,15 +213,15 @@ The top-level fields define what the mob is and how it identifies itself.
 
 ```yaml
 mob: zombie attack-damage:90 movement-speed:1.5 follow-range:16 health:1200 # Base entity plus stat modifiers
-category: common # The category ID; controls natural spawning
+category: common # The category ID; controls natural spawning. Optional.
 display-name: "&cNecrotic Soldier &7| &c%health%♥ &7| &e%time%" # Supports the internal placeholders below
 lifespan: 120 # Seconds before the mob despawns; set to -1 to disable
 ```
 
 The `mob` line is a base entity with stat modifiers, read through the [Entity Lookup System](https://plugins.auxilor.io/the-entity-lookup-system).
 
-:::warning
-Every mob **must** set a `category`, even if you want no natural spawning. The category drives spawning behaviour; without it the mob will not load. Use a category whose spawning `type` is `none` to opt out of natural spawning.
+:::info
+`category` is optional. Leave it out and the mob never spawns naturally, but it can still be spawned with commands, eggs, totems, spawners, and [scheduled spawning](#scheduled-spawning). A `category` that names a category that does not exist still stops the mob from loading.
 :::
 
 ### Equipment
@@ -218,11 +248,31 @@ integrations:
     can-level: true # Allow LevelledMobs to level this mob
   model-engine:
     id: "" # ModelEngine model ID
+    animations: # Optional; each takes one name or a list, picked at random each time
+      idle: [ ] # Loops while the mob stands still
+      move: [ ] # Loops while the mob moves
+      spawn: [ ] # Plays once when the mob spawns
+      melee-attack: [ ] # Plays once when the mob hits something in melee
+      ranged-attack: [ ] # Plays once when the mob shoots a projectile
+      take-damage: [ ] # Plays once when the mob is hurt
+      death: [ ] # Plays once when the mob dies
   better-model:
     id: "" # BetterModel model ID
+    animations: # Optional; each takes one name or a list, picked at random each time
+      idle: [ ] # Loops while the mob stands still
+      move: [ ] # Loops while the mob moves
+      spawn: [ ] # Plays once when the mob spawns
+      melee-attack: [ ] # Plays once when the mob hits something in melee
+      ranged-attack: [ ] # Plays once when the mob shoots a projectile
+      take-damage: [ ] # Plays once when the mob is hurt
+      death: [ ] # Plays once when the mob dies
   libs-disguises:
     id: "" # LibsDisguises disguise ID
 ```
+
+:::tip Model animations
+`model-engine` and `better-model` take the same `animations`. `idle`, `move` and `death` replace the model's own animations for those states, so the model switches between them and finishes its death animation by itself. The others play once on their event. Give a list, e.g. `melee-attack: [ swipe, slam ]`, to pick one at random each time. For anything else, such as a stage starting, use the `play_animation` effect in that stage's effects.
+:::
 
 ### Custom AI
 
@@ -236,6 +286,20 @@ custom-ai:
 ```
 
 See the [Custom Entity AI](https://plugins.auxilor.io/all-plugins/custom-entity-ai) docs for the full list of goals.
+
+:::tip EcoBosses target modes
+The EcoBosses `target` modes are target goals now, such as `ecomobs:closest_player`, `ecomobs:random_player` and `ecomobs:top_damager_player`. Give one a lower priority number than the vanilla target goals, or set `clear: true`, so the mob always uses it.
+
+```yaml
+custom-ai:
+  target-goals:
+    - key: ecomobs:closest_player
+      priority: 0
+      args:
+        range: 40 # The distance to scan for players.
+        interval: 10 # The time to wait between choosing a target, in ticks.
+```
+:::
 
 ### Effects
 
@@ -476,7 +540,7 @@ boss-bar:
 
 ### Spawn
 
-Let players summon the mob with a 3-block totem, a spawn egg, or both.
+Let players summon the mob with a 3-block totem, a spawn egg, or both, and spawn it at fixed points on a timer with `scheduled`. A totem is used up when it summons its mob: the three blocks are removed and only one mob spawns.
 
 ```yaml
 spawn:
@@ -506,8 +570,59 @@ spawn:
       - iron_block
 ```
 
+A spawn egg fired from a dispenser checks its `conditions` against the nearest player within 5 blocks. If the egg has conditions and no player is that close, the egg stays in the dispenser.
+
 :::tip
 We support shaped and shapeless recipes. Check out [Recipes](https://plugins.auxilor.io/the-item-lookup-system/recipes) for more info on how to configure these.
+:::
+
+#### Scheduled spawning
+
+Spawns the mob at fixed points, such as a boss arena, without natural spawning. Each point spawns one mob per interval while it has fewer than `max-alive` of its mobs alive. The interval counts from the most recent spawn or death at that point, so a boss killed right after it spawns still waits a full interval before the next one.
+
+```yaml
+spawn:
+  scheduled:
+    enabled: true # If scheduled spawning should be enabled.
+    points: # The places this mob spawns at.
+      - id: arena
+        world: world
+        x: 120.5
+        y: 64
+        z: -340.5
+        max-alive: 2 # Optional. Overrides max-alive for this point.
+    max-alive: 1 # The most mobs from one point that can be alive at once.
+    interval: # The seconds to wait after a spawn or a death before the next spawn, picked at random between min and max.
+      min: 1800
+      max: 3600
+    conditions: [ ] # The conditions the point must meet when a spawn is due. When they are not met, the spawn waits and tries again.
+    broadcast: # The lines sent to all players when this mob spawns at a point. Leave empty to send nothing.
+      - "%mob% &fhas appeared at &e%point%&f!"
+```
+
+| Key | Meaning |
+| --- | --- |
+| `enabled` | If the mob spawns at its points |
+| `points[].id` | The point ID, used in `/ecomobs schedule`. Lowercase letters, numbers, and underscores only, unique within the mob |
+| `points[].world` | The world the point is in. Points in a world that is not loaded wait until it is |
+| `points[].x`, `y`, `z` | Where the mob spawns |
+| `points[].max-alive` | Optional. Overrides `max-alive` for this point |
+| `max-alive` | The most mobs from one point alive at once. Defaults to 1 |
+| `interval.min`, `interval.max` | The seconds between spawns, picked at random between the two |
+| `conditions` | Conditions checked when a spawn is due |
+| `broadcast` | Lines sent to every online player when the mob spawns at a point |
+
+These placeholders work in `broadcast`:
+
+| Placeholder | Value |
+| --- | --- |
+| `%mob%` | The display name of the mob |
+| `%point%` | The point ID |
+| `%world%` | The point's world |
+| `%x%`, `%y%`, `%z%` | The block coordinates of the point |
+
+:::info
+A point only spawns while its chunk is loaded and mobs are active there, so nothing spawns in an empty area, and EcoMobs never loads chunks to spawn a mob. Points remember their mobs and timers across restarts, so a restart never spawns extra mobs. Mobs from scheduled spawning never despawn because players are far away, but their `lifespan` still applies.
 :::
 
 ## Internal placeholders
@@ -538,6 +653,7 @@ The number of places is set by `top-damager-places` in `config.yml`, and default
 :::tip Troubleshooting
 - **Mob won't load?** Check the ID rules above; the file name must be lowercase letters, numbers, and underscores only.
 - **Mob loads but never spawns naturally?** It needs a `category` whose spawning `type` is `replace` or `custom`; a missing or `none` category means no natural spawning.
+- **Scheduled mob not spawning?** Run `/ecomobs schedule list` to see each point's alive count and when it spawns next. A point only spawns while its chunk is loaded.
 - **Spawn egg won't craft?** Confirm `craftable: true` and that the crafting player has the `recipe-permission` if you set one.
 - **Equipment ignored?** The base entity must support that slot; not every vanilla mob wears armour or holds items.
 - **Staged mob dying too fast or not at all?** Check every stage has the key its `mode` needs — `health` for `mode: health`, `required-hits` for `mode: hits`. A stage whose key is not a number is skipped entirely.
